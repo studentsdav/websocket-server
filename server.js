@@ -1,10 +1,4 @@
-const express = require('express');
-const { createServer } = require('http');
-const { Server } = require('socket.io');
-
-const app = express();
-const server = createServer(app);
-const io = new Server(server, {
+const io = require('socket.io')(3000, {
     cors: { origin: "*" }
 });
 
@@ -38,9 +32,4 @@ io.on('connection', (socket) => {
         }
         console.log('User disconnected:', socket.id);
     });
-});
-
-const PORT = process.env.PORT || 10000;
-server.listen(PORT, () => {
-    console.log(`WebSocket Server running on port ${PORT}`);
 });
