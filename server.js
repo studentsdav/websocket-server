@@ -1,35 +1,49 @@
-const io = require('socket.io')(3000, {
-    cors: { origin: "*" }
+const express = require("express");
+const http = require("http");
+const WebSocket = require("ws");
+
+const app = express();
+const server = http.createServer(app); // Create HTTP server for WebSocket
+const wss = new WebSocket.Server({ server });
+
+let clients = {}; // Stores connected clients
+
+wss.on("connection", (ws) => {
+    ws.on("message", (message) => {
+        let data = JSON.parse(message);
+
+        switch (data.type) {
+            case "register":
+                clients[data.deviceId] = ws;
+                console.log(`Device ${data.deviceId} registered.`);
+                break;
+
+            case "track_request":
+                if (clients[data.receiverId]) {
+                    clients[data.receiverId].send(JSON.stringify({ type: "start_tracking", senderId: data.senderId }));
+                }
+                break;
+
+            case "send_location":
+                if (clients[data.receiverId]) {
+                    clients[data.receiverId].send(JSON.stringify({ type: "receive_location", location: data.location }));
+                }
+                break;
+        }
+    });
+
+    ws.on("close", () => {
+        for (let key in clients) {
+            if (clients[key] === ws) {
+                delete clients[key];
+                break;
+            }
+        }
+    });
 });
 
-let users = {}; // Store connected users
-
-io.on('connection', (socket) => {
-    console.log('User connected:', socket.id);
-
-    socket.on('register', (data) => {
-        users[data.deviceId] = socket.id;
-    });
-
-    socket.on('track_request', (data) => {
-        const receiverSocketId = users[data.receiverId];
-        if (receiverSocketId) {
-            io.to(receiverSocketId).emit('track_start', { senderId: data.senderId });
-        }
-    });
-
-    socket.on('sendLocation', (data) => {
-        const receiverSocketId = users[data.receiverId];
-        if (receiverSocketId) {
-            io.to(receiverSocketId).emit('receiveLocation', data);
-        }
-    });
-
-    socket.on('disconnect', () => {
-        let userKey = Object.keys(users).find(key => users[key] === socket.id);
-        if (userKey) {
-            delete users[userKey];
-        }
-        console.log('User disconnected:', socket.id);
-    });
+// Use Render-assigned PORT
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+    console.log(`WebSocket server running on ws://localhost:${PORT}`);
 });
