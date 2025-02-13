@@ -1,77 +1,61 @@
-const express = require("express");
-const http = require("http");
-const WebSocket = require("ws");
-const cors = require("cors");
+const express = require('express');
+const http = require('http');
+const WebSocket = require('ws');
+const cors = require('cors');
 
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-app.use(cors()); // ✅ Fix CORS Issues
+app.use(cors());
+app.use(express.json());
 
-let clients = {}; // Stores active devices
+let childLocation = null;
 
-// ✅ Health Check Route (Prevents Render.com from shutting down)
-app.get("/health", (req, res) => {
-    res.status(200).send("WebSocket Server is Running ✅");
-});
+wss.on('connection', (ws) => {
+    console.log('New client connected');
 
-wss.on("connection", (ws) => {
-    let deviceId = null;
-
-    ws.on("message", (message) => {
+    ws.on('message', (message) => {
         try {
-            let data = JSON.parse(message);
+            const data = JSON.parse(message);
+            if (data.type === 'location') {
+                childLocation = data;
 
-            switch (data.type) {
-                case "register":
-                    deviceId = data.deviceId;
-                    clients[deviceId] = ws;
-                    console.log(`✅ Device Registered: ${deviceId}`);
-                    break;
+                // Print the received location in console
+                //   console.log(`Received location: Latitude=${data.latitude}, Longitude=${data.longitude}`);
 
-                case "track_request":
-                    if (clients[data.receiverId]) {
-                        clients[data.receiverId].send(JSON.stringify({
-                            type: "start_webrtc",
-                            senderId: data.senderId
-                        }));
-                    } else {
-                        console.log(`❌ Device ${data.receiverId} is not online.`);
+                // Broadcast location to all connected clients
+                wss.clients.forEach(client => {
+                    if (client !== ws && client.readyState === WebSocket.OPEN) {
+                        client.send(JSON.stringify({ type: 'update', location: childLocation }));
                     }
-                    break;
+                });
+
+                // Check if no clients are listening, then close the connection
+                if ([...wss.clients].filter(client => client.readyState === WebSocket.OPEN).length === 0) {
+                    console.log("No active listeners, closing connection.");
+                    ws.close();
+                }
             }
         } catch (error) {
-            console.error("❌ Error processing WebSocket message:", error);
+            console.error('Error processing message:', error);
         }
     });
 
-    ws.on("close", () => {
-        if (deviceId) {
-            delete clients[deviceId];
-            console.log(`❌ Device Disconnected: ${deviceId}`);
+    ws.on('close', () => {
+        console.log('Client disconnected');
+        // If no clients are left, reset childLocation
+        if (wss.clients.size === 0) {
+            childLocation = null;
+            console.log("All clients disconnected, stopping tracking.");
         }
-    });
-
-    ws.on("error", (err) => {
-        console.error("⚠️ WebSocket Error:", err);
     });
 });
 
-// ✅ Keep WebSocket connections alive (Prevents Render inactivity shutdown)
-setInterval(() => {
-    Object.keys(clients).forEach(deviceId => {
-        if (clients[deviceId].readyState !== WebSocket.OPEN) {
-            delete clients[deviceId]; // Remove disconnected clients
-            console.log(`⚠️ Removed inactive device: ${deviceId}`);
-        } else {
-            clients[deviceId].send(JSON.stringify({ type: "ping" })); // Keep connection alive
-        }
-    });
-}, 30000); // Runs every 30 seconds
+app.get('/', (req, res) => {
+    res.send('Parent-Child Tracking API is running');
+});
 
-// ✅ Start WebSocket server on Render's dynamic port
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-    console.log(`🚀 WebSocket Server Running on ws://localhost:${PORT}`);
+server.listen(3000, () => {
+    console.log('Server running on port 3000');
 });
