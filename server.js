@@ -13,7 +13,10 @@ app.use(express.json());
 let childLocation = null;
 
 wss.on('connection', (ws) => {
-    console.log('New client connected');
+    console.log(`✅ New client connected. Total Clients: ${wss.clients.size}`);
+
+    // Broadcast the current number of connected clients
+    broadcastClientCount();
 
     ws.on('message', (message) => {
         try {
@@ -21,41 +24,51 @@ wss.on('connection', (ws) => {
             if (data.type === 'location') {
                 childLocation = data;
 
-                // Print the received location in console
-                //   console.log(`Received location: Latitude=${data.latitude}, Longitude=${data.longitude}`);
+                // Print received location
+                //  console.log(`📍 Received location: Latitude=${data.latitude}, Longitude=${data.longitude}`);
 
                 // Broadcast location to all connected clients
                 wss.clients.forEach(client => {
-                    if (client !== ws && client.readyState === WebSocket.OPEN) {
+                    if (client.readyState === WebSocket.OPEN) {
                         client.send(JSON.stringify({ type: 'update', location: childLocation }));
                     }
                 });
-
-                // Check if no clients are listening, then close the connection
-                if ([...wss.clients].filter(client => client.readyState === WebSocket.OPEN).length === 0) {
-                    console.log("No active listeners, closing connection.");
-                    ws.close();
-                }
             }
         } catch (error) {
-            console.error('Error processing message:', error);
+            console.error('❌ Error processing message:', error);
         }
     });
 
     ws.on('close', () => {
-        console.log('Client disconnected');
-        // If no clients are left, reset childLocation
+        console.log(`❌ Client disconnected. Total Clients: ${wss.clients.size - 1}`);
+
+        // Broadcast the new count to all clients
+        broadcastClientCount();
+
+        // If no clients are left, reset location data
         if (wss.clients.size === 0) {
             childLocation = null;
-            console.log("All clients disconnected, stopping tracking.");
+            console.log("⚠️ All clients disconnected, stopping tracking.");
         }
     });
 });
+
+// Function to broadcast client count to all connected clients
+function broadcastClientCount() {
+    const clientCount = wss.clients.size;
+    console.log(`🔄 Real-time connected clients: ${clientCount}`);
+
+    wss.clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) {
+            client.send(JSON.stringify({ type: 'client_count', count: clientCount }));
+        }
+    });
+}
 
 app.get('/', (req, res) => {
     res.send('Parent-Child Tracking API is running');
 });
 
 server.listen(3000, () => {
-    console.log('Server running on port 3000');
+    console.log('🚀 Server running on port 3000');
 });
