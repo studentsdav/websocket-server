@@ -69,6 +69,6 @@ app.get('/', (req, res) => {
     res.send('Parent-Child Tracking API is running');
 });
 
-server.listen(3000, () => {
+server.listen(10000, () => {
     console.log('🚀 Server running on port 3000');
 });
